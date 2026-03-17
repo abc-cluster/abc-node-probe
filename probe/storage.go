@@ -5,6 +5,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/shirou/gopsutil/v3/disk"
@@ -14,11 +15,88 @@ func storageChecks(cfg Config) []checkFunc {
 	return []checkFunc{
 		checkScratchFreeSpace,
 		checkScratchInode,
+		checkScratchFilesystemType,
 		checkScratchIOPS,
+		checkMountInventory,
 		checkMinioEndpoint,
 		checkInotifyLimits,
 		checkUlimits,
 	}
+}
+
+// scratchDir returns "/scratch" if the directory exists, otherwise "/tmp".
+func scratchDir() string {
+	if _, err := os.Stat("/scratch"); err == nil {
+		return "/scratch"
+	}
+	return "/tmp"
+}
+
+// isPathUnder reports whether path is equal to mp or nested under it.
+func isPathUnder(path, mp string) bool {
+	if path == mp {
+		return true
+	}
+	if mp == "/" {
+		return strings.HasPrefix(path, "/")
+	}
+	return strings.HasPrefix(path, mp+"/")
+}
+
+// fsTypeForPath returns the filesystem type and backing device for the mount
+// point that contains path, using a longest-prefix match across all mounts.
+// It calls disk.Partitions(true) so that pseudo-filesystems such as tmpfs are
+// included and correctly identified.
+func fsTypeForPath(path string) (fstype, device string, err error) {
+	partitions, err := disk.Partitions(true)
+	if err != nil {
+		return "", "", fmt.Errorf("could not list partitions: %w", err)
+	}
+	bestLen := -1
+	for _, p := range partitions {
+		if !isPathUnder(path, p.Mountpoint) {
+			continue
+		}
+		if len(p.Mountpoint) > bestLen {
+			bestLen = len(p.Mountpoint)
+			fstype = p.Fstype
+			device = p.Device
+		}
+	}
+	if bestLen == -1 {
+		return "", "", fmt.Errorf("no mount point found for %s", path)
+	}
+	return fstype, device, nil
+}
+
+// networkFSTypes lists filesystem types that are network-backed.
+var networkFSTypes = map[string]bool{
+	"nfs": true, "nfs3": true, "nfs4": true,
+	"cifs": true, "smbfs": true,
+	"fuse.sshfs": true, "fuse.s3fs": true,
+	"fuse.glusterfs": true, "fuse.gcsfuse": true, "fuse.cephfs": true,
+	"afs": true, "9p": true,
+}
+
+// isNetworkFSType reports whether fstype is a network-backed filesystem.
+func isNetworkFSType(fstype string) bool {
+	lower := strings.ToLower(fstype)
+	return networkFSTypes[lower] || strings.HasPrefix(lower, "fuse.")
+}
+
+// pseudoFSTypes lists filesystem types that are virtual/pseudo (not real storage).
+var pseudoFSTypes = map[string]bool{
+	"tmpfs": true, "ramfs": true, "sysfs": true, "proc": true,
+	"devtmpfs": true, "devpts": true, "cgroup": true, "cgroup2": true,
+	"pstore": true, "securityfs": true, "hugetlbfs": true, "mqueue": true,
+	"debugfs": true, "tracefs": true, "fusectl": true, "configfs": true,
+	"binfmt_misc": true, "overlay": true, "aufs": true,
+	"squashfs": true, "iso9660": true, "udf": true, "autofs": true,
+}
+
+// isPseudoFSType reports whether fstype is a virtual or pseudo filesystem.
+func isPseudoFSType(fstype string) bool {
+	return pseudoFSTypes[strings.ToLower(fstype)]
 }
 
 func checkScratchFreeSpace() CheckResult {
@@ -26,12 +104,7 @@ func checkScratchFreeSpace() CheckResult {
 	id := "storage.scratch.free_space"
 	cat := "storage"
 
-	// Use /tmp as scratch if no dedicated scratch mount exists
-	scratchPath := "/scratch"
-	if _, err := os.Stat(scratchPath); err != nil {
-		scratchPath = "/tmp"
-	}
-
+	scratchPath := scratchDir()
 	usage, err := disk.Usage(scratchPath)
 	if err != nil {
 		return CheckResult{
@@ -42,6 +115,8 @@ func checkScratchFreeSpace() CheckResult {
 	}
 
 	freeGB := float64(usage.Free) / (1024 * 1024 * 1024)
+	totalGB := float64(usage.Total) / (1024 * 1024 * 1024)
+	usedGB := float64(usage.Used) / (1024 * 1024 * 1024)
 	sev := SeverityPass
 	msg := ""
 
@@ -58,7 +133,12 @@ func checkScratchFreeSpace() CheckResult {
 		ID: id, Category: cat, Name: "Scratch Free Space",
 		Severity: sev, Message: msg,
 		Value: fmt.Sprintf("%.1f", freeGB), Unit: "GB",
-		Metadata:   map[string]string{"path": scratchPath},
+		Metadata: map[string]string{
+			"path":     scratchPath,
+			"total_gb": fmt.Sprintf("%.1f", totalGB),
+			"used_gb":  fmt.Sprintf("%.1f", usedGB),
+			"used_pct": fmt.Sprintf("%.1f", usage.UsedPercent),
+		},
 		DurationMs: time.Since(start).Milliseconds(),
 	}
 }
@@ -68,11 +148,7 @@ func checkScratchInode() CheckResult {
 	id := "storage.scratch.inodes_free"
 	cat := "storage"
 
-	scratchPath := "/scratch"
-	if _, err := os.Stat(scratchPath); err != nil {
-		scratchPath = "/tmp"
-	}
-
+	scratchPath := scratchDir()
 	usage, err := disk.Usage(scratchPath)
 	if err != nil {
 		return CheckResult{
@@ -82,10 +158,18 @@ func checkScratchInode() CheckResult {
 		}
 	}
 
-	inodesFreePct := 100.0
-	if usage.InodesTotal > 0 {
-		inodesFreePct = float64(usage.InodesFree) / float64(usage.InodesTotal) * 100
+	// Some filesystems (e.g. FAT32, certain network mounts) report zero inodes.
+	if usage.InodesTotal == 0 {
+		return CheckResult{
+			ID: id, Category: cat, Name: "Scratch Inodes Free",
+			Severity: SeverityInfo,
+			Message:  fmt.Sprintf("filesystem at %s does not report inode counts", scratchPath),
+			Metadata: map[string]string{"path": scratchPath},
+			DurationMs: time.Since(start).Milliseconds(),
+		}
 	}
+
+	inodesFreePct := float64(usage.InodesFree) / float64(usage.InodesTotal) * 100
 
 	sev := SeverityPass
 	msg := ""
@@ -101,7 +185,96 @@ func checkScratchInode() CheckResult {
 		ID: id, Category: cat, Name: "Scratch Inodes Free",
 		Severity: sev, Message: msg,
 		Value: fmt.Sprintf("%.1f", inodesFreePct), Unit: "%",
-		Metadata:   map[string]string{"path": scratchPath},
+		Metadata: map[string]string{
+			"path":        scratchPath,
+			"inode_total": fmt.Sprintf("%d", usage.InodesTotal),
+			"inode_used":  fmt.Sprintf("%d", usage.InodesUsed),
+		},
+		DurationMs: time.Since(start).Milliseconds(),
+	}
+}
+
+// checkScratchFilesystemType detects the filesystem type of the scratch path
+// and warns when it is memory-backed (tmpfs/ramfs) or network-backed (nfs/cifs/fuse).
+// Inspired by duf's per-mount fstype detection via /proc/self/mountinfo.
+func checkScratchFilesystemType() CheckResult {
+	start := time.Now()
+	id := "storage.scratch.filesystem_type"
+	cat := "storage"
+
+	path := scratchDir()
+	fstype, device, err := fsTypeForPath(path)
+	if err != nil {
+		return CheckResult{
+			ID: id, Category: cat, Name: "Scratch Filesystem Type",
+			Severity: SeverityWarn,
+			Message:  fmt.Sprintf("could not detect filesystem type for %s: %v", path, err),
+			Metadata: map[string]string{"path": path},
+			DurationMs: time.Since(start).Milliseconds(),
+		}
+	}
+
+	sev := SeverityPass
+	msg := fmt.Sprintf("%s is %s (%s)", path, fstype, device)
+	switch {
+	case fstype == "tmpfs" || fstype == "ramfs":
+		sev = SeverityFail
+		msg = fmt.Sprintf("scratch path %s is backed by %s — memory-backed storage is not persistent and is unsuitable for compute workloads", path, fstype)
+	case isNetworkFSType(fstype):
+		sev = SeverityWarn
+		msg = fmt.Sprintf("scratch path %s uses a network filesystem (%s) — expect higher latency and reduced throughput compared to local storage", path, fstype)
+	}
+
+	return CheckResult{
+		ID: id, Category: cat, Name: "Scratch Filesystem Type",
+		Severity: sev, Message: msg,
+		Value: fstype,
+		Metadata: map[string]string{
+			"path":   path,
+			"fstype": fstype,
+			"device": device,
+		},
+		DurationMs: time.Since(start).Milliseconds(),
+	}
+}
+
+// checkMountInventory enumerates all local, non-pseudo mount points and reports
+// them as an informational result. This mirrors duf's approach of enumerating
+// all mounts with their filesystem type and device.
+func checkMountInventory() CheckResult {
+	start := time.Now()
+	id := "storage.mounts.inventory"
+	cat := "storage"
+
+	partitions, err := disk.Partitions(false)
+	if err != nil {
+		return CheckResult{
+			ID: id, Category: cat, Name: "Mount Point Inventory",
+			Severity: SeverityWarn,
+			Message:  fmt.Sprintf("could not enumerate mount points: %v", err),
+			DurationMs: time.Since(start).Milliseconds(),
+		}
+	}
+
+	var local []disk.PartitionStat
+	for _, p := range partitions {
+		if !isPseudoFSType(p.Fstype) {
+			local = append(local, p)
+		}
+	}
+
+	metadata := make(map[string]string, len(local)+1)
+	metadata["count"] = fmt.Sprintf("%d", len(local))
+	for i, p := range local {
+		metadata[fmt.Sprintf("mount_%d", i)] = fmt.Sprintf("%s type=%s device=%s", p.Mountpoint, p.Fstype, p.Device)
+	}
+
+	return CheckResult{
+		ID: id, Category: cat, Name: "Mount Point Inventory",
+		Severity: SeverityInfo,
+		Message:  fmt.Sprintf("%d local mount point(s) detected", len(local)),
+		Value:    len(local),
+		Metadata: metadata,
 		DurationMs: time.Since(start).Milliseconds(),
 	}
 }
@@ -113,11 +286,7 @@ func checkScratchIOPS() CheckResult {
 	id := "storage.scratch.write_throughput"
 	cat := "storage"
 
-	scratchPath := "/scratch"
-	if _, err := os.Stat(scratchPath); err != nil {
-		scratchPath = "/tmp"
-	}
-
+	scratchPath := scratchDir()
 	tmpFile := filepath.Join(scratchPath, fmt.Sprintf(".nomad-probe-bench-%d", time.Now().UnixNano()))
 	f, err := os.Create(tmpFile)
 	if err != nil {
