@@ -2,6 +2,14 @@
 
 This document describes the automated GitHub Actions workflows configured for abc-node-probe.
 
+## Overview
+
+The abc-node-probe project includes three main workflows:
+1. **CI** — Tests and builds on every push/PR
+2. **Build and Release** — Creates releases when version tags are pushed
+
+---
+
 ## Workflows
 
 ### 1. CI (Continuous Integration)

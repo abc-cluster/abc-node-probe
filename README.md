@@ -113,6 +113,9 @@ CGO_ENABLED=0 go test -tags integration ./...
 # Send to control plane API
 ./abc-node-probe --jurisdiction=ZA --mode=send --api-endpoint=https://api.abc-cluster.example.com
 
+# Send results to API with nomad-mode (exits 0 but posts results)
+./abc-node-probe --nomad-mode --jurisdiction=ZA --mode=send --api-endpoint=https://api.abc-cluster.example.com
+
 # Skip slow or irrelevant categories
 ./abc-node-probe --jurisdiction=ZA --skip-categories=smart,compliance
 
@@ -230,8 +233,13 @@ task "probe" {
 In `--nomad-mode`:
 - **Exit code is always 0** (task completed successfully)
 - **Node readiness verdict** is conveyed via JSON output in the `summary.eligible_to_join` field
-- **Allocations can be queried** for the probe output to determine actual node readiness
-- **API mode (`--mode=send`)** still reports results to control plane; readiness decision stays centralized
+- **Allocations can be queried** for the probe output (`nomad alloc logs <alloc-id> probe`) to determine actual node readiness
+- **API mode (`--mode=send`)** can be combined with `--nomad-mode`: results are posted to control plane and job still exits 0
+
+**Example: Send results to API with clean Nomad exit**
+```bash
+./abc-node-probe --nomad-mode --mode=send --jurisdiction=ZA --api-endpoint=https://api.abc-cluster --api-token=$TOKEN
+```
 
 ---
 
