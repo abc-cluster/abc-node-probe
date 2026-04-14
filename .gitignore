@@ -1,0 +1,28 @@
+# Build artifacts
+/abc-node-probe
+/abc-node-probe-linux-amd64
+/abc-node-probe-linux-arm64
+/abc-node-probe-darwin-amd64
+/abc-node-probe-darwin-arm64
+/abc-node-probe-windows-amd64.exe
+/abc-node-probe-windows-arm64.exe
+/dist/
+
+# IDE and Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Test and coverage
+*.out
+coverage.html
+*.coverprofile
+
+# OS specific
+Thumbs.db
+
+# Development
+.claude

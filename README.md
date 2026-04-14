@@ -15,10 +15,27 @@ It collects structured health-check results and either prints them to stdout, wr
 | `hardware`   | CPU architecture, core count, RAM, NUMA topology, GPU devices |
 | `storage`    | Scratch free space, inode availability, write throughput, MinIO endpoint, inotify limits, open-file ulimits |
 | `smart`      | Drive health via S.M.A.R.T. ioctl (Linux only; ATA, NVMe, SCSI) |
-| `network`    | Tailscale daemon, NTP sync, DNS resolution, network interfaces |
+| `network`    | Tailscale daemon, NTP sync, DNS resolution, network interfaces, **network throughput (speedtest)** |
 | `os`         | Kernel version, cgroups version, kernel namespaces, systemd, SELinux, overlayfs |
 | `compliance` | Jurisdiction declaration, encryption at rest (LUKS), cross-border mounts |
 | `security`   | SSH root login, firewall, world-writable system dirs, TLS cert expiry |
+
+### Network Speedtest
+
+The `network.speedtest.throughput` check measures actual network performance by running a speed test against the nearest `speedtest.net` server. This provides:
+
+- **Download speed** (Mbps)
+- **Upload speed** (Mbps)
+- **Latency** (milliseconds)
+- **Jitter** (milliseconds)
+- **Server location and distance**
+- **Client ISP and public IP** (metadata only)
+
+**Duration:** ~30-60 seconds depending on network speed  
+**Severity:** INFO (or WARN if download < 10 Mbps)  
+**Requirements:** Internet connectivity to speedtest.net servers
+
+This check is informational and does not prevent cluster membership, but provides valuable insights into node network connectivity and performance before onboarding.
 
 ---
 
@@ -86,6 +103,9 @@ CGO_ENABLED=0 go test -tags integration ./...
 
 # With jurisdiction declared (required for compliance checks)
 ./abc-node-probe --jurisdiction=ZA
+
+# Nomad-compatible mode (always exits 0, check JSON for readiness)
+./abc-node-probe --nomad-mode --jurisdiction=ZA --json
 
 # Write JSON report to file
 ./abc-node-probe --jurisdiction=ZA --mode=file --output-file=/tmp/report.json
@@ -184,10 +204,34 @@ Every run produces one `ProbeReport`:
 
 | Code | Meaning |
 |------|---------|
-| `0`  | All checks PASS or SKIP |
-| `1`  | At least one WARN, zero FAIL |
-| `2`  | At least one FAIL |
+| `0`  | All checks PASS or SKIP, OR `--nomad-mode` is enabled |
+| `1`  | At least one WARN, zero FAIL (not used in `--nomad-mode`) |
+| `2`  | At least one FAIL (not used in `--nomad-mode`) |
 | `3`  | Tool execution error (bad flags, API unreachable, file write failure) |
+
+### Using with Nomad
+
+When running abc-node-probe as a Nomad job via `raw_exec` driver, use the `--nomad-mode` flag to ensure the job exits cleanly with code 0 regardless of probe results. This prevents Nomad from restarting the task on node health issues.
+
+```hcl
+task "probe" {
+  driver = "raw_exec"
+  config {
+    command = "/opt/nomad/abc-node-probe"
+    args = [
+      "--nomad-mode",
+      "--json",
+      "--jurisdiction=ZA"
+    ]
+  }
+}
+```
+
+In `--nomad-mode`:
+- **Exit code is always 0** (task completed successfully)
+- **Node readiness verdict** is conveyed via JSON output in the `summary.eligible_to_join` field
+- **Allocations can be queried** for the probe output to determine actual node readiness
+- **API mode (`--mode=send`)** still reports results to control plane; readiness decision stays centralized
 
 ---
 

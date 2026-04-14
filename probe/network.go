@@ -16,6 +16,7 @@ func networkChecks(cfg Config) []checkFunc {
 		checkNTPSync,
 		checkDNSResolution,
 		checkNetworkInterfaces,
+		checkNetworkSpeedtest,
 	}
 }
 

@@ -1,0 +1,141 @@
+name: Build and Release
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+on:
+  push:
+    tags:
+      - v*.*.*
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build (${{ matrix.goos }}/${{ matrix.goarch }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: darwin
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
+          - goos: windows
+            goarch: amd64
+          - goos: windows
+            goarch: arm64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build binary
+        shell: bash
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 0
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          BIN_NAME="abc-node-probe"
+          EXT=""
+          if [ "${GOOS}" = "windows" ]; then
+            EXT=".exe"
+          fi
+          OUT="dist/${BIN_NAME}-${GOOS}-${GOARCH}${EXT}"
+          VERSION="${GITHUB_REF#refs/tags/}"
+          BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          GIT_COMMIT="${GITHUB_SHA:0:7}"
+          LDFLAGS="-s -w -X main.Version=${VERSION} -X main.BuildTime=${BUILD_TIME} -X main.GitCommit=${GIT_COMMIT}"
+          go build -trimpath -ldflags="${LDFLAGS}" -o "${OUT}" .
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v5
+        with:
+          name: abc-node-probe-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/*
+          if-no-files-found: error
+
+  release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: build
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v5
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Generate checksums
+        shell: bash
+        run: |
+          cd dist
+          sha256sum \
+            abc-node-probe-linux-amd64 \
+            abc-node-probe-linux-arm64 \
+            abc-node-probe-darwin-amd64 \
+            abc-node-probe-darwin-arm64 \
+            abc-node-probe-windows-amd64.exe \
+            abc-node-probe-windows-arm64.exe \
+            > sha256sums.txt
+          cat sha256sums.txt
+
+      - name: Generate release notes
+        id: release_notes
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/}"
+          COMMIT_URL="https://github.com/${{ github.repository }}/commit/${{ github.sha }}"
+          echo "## Release ${VERSION}" > /tmp/release_notes.md
+          echo "" >> /tmp/release_notes.md
+          echo "**Build:** Automated GitHub Actions release" >> /tmp/release_notes.md
+          echo "" >> /tmp/release_notes.md
+          echo "**Commit:** [\`$(git rev-parse --short HEAD)\`](${COMMIT_URL})" >> /tmp/release_notes.md
+          echo "" >> /tmp/release_notes.md
+          echo "### Checksums" >> /tmp/release_notes.md
+          echo '```' >> /tmp/release_notes.md
+          cat dist/sha256sums.txt >> /tmp/release_notes.md
+          echo '```' >> /tmp/release_notes.md
+          cat /tmp/release_notes.md
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          body_path: /tmp/release_notes.md
+          files: |
+            dist/abc-node-probe-*
+            dist/sha256sums.txt
+          draft: false
+          prerelease: false

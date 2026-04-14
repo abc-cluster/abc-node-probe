@@ -29,6 +29,7 @@ type flags struct {
 	skipCategories string
 	failFast       bool
 	jsonOnly       bool
+	nomadMode      bool
 	timeout        time.Duration
 	showVersion    bool
 }
@@ -68,6 +69,7 @@ It never modifies system state.`,
 	cmd.Flags().StringVar(&f.skipCategories, "skip-categories", "", "Comma-separated check categories to skip: hardware,storage,smart,network,os,compliance,security")
 	cmd.Flags().BoolVar(&f.failFast, "fail-fast", false, "Stop after first FAIL result")
 	cmd.Flags().BoolVar(&f.jsonOnly, "json", false, "Print raw JSON to stdout (suppresses coloured output)")
+	cmd.Flags().BoolVar(&f.nomadMode, "nomad-mode", false, "Nomad-compatible mode: always exit 0 (success) since probe task completed; use JSON output to check node readiness")
 	cmd.Flags().DurationVar(&f.timeout, "timeout", 120*time.Second, "Overall probe timeout")
 	cmd.Flags().BoolVar(&f.showVersion, "version", false, "Print version and exit")
 
@@ -137,6 +139,11 @@ func run(f *flags) error {
 	}
 
 	exitCode := exitCodeForReport(report)
+	// In nomad-mode, always exit 0 since the probe task completed successfully.
+	// Node readiness is conveyed via JSON output/API, not exit code.
+	if f.nomadMode {
+		exitCode = 0
+	}
 
 	switch f.mode {
 	case "stdout":
