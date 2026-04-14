@@ -14,7 +14,7 @@ BINARY = abc-node-probe
 	build-darwin-amd64 build-darwin-arm64 \
 	build-windows-amd64 build-windows-arm64 \
 	build-all \
-	test test-unit lint release clean help
+	test test-unit release clean help
 
 .DEFAULT_GOAL := help
 
@@ -68,9 +68,6 @@ test-unit: ## Run unit tests only (no network, no /proc required)
 
 test-integration: ## Run integration tests (cross-platform; SMART subtests require Linux + root)
 	CGO_ENABLED=0 go test -tags integration ./...
-
-lint: ## Run golangci-lint
-	golangci-lint run
 
 release: build-all ## Build all platforms and generate sha256sums.txt in dist/
 	cd dist && sha256sum \

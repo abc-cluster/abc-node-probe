@@ -364,14 +364,6 @@ Uses [Semantic Versioning](https://semver.org/):
 
 ---
 
-## Lint
-
-```sh
-make lint   # requires golangci-lint in PATH
-```
-
----
-
 ## Documentation
 
 - **[USAGE.md](USAGE.md)** — Detailed usage guide with workflows and examples
