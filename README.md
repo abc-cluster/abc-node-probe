@@ -6,6 +6,40 @@ It collects structured health-check results and either prints them to stdout, wr
 
 **It never modifies system state.**
 
+📖 **Quick Start:** See [USAGE.md](USAGE.md) for installation, common workflows, and examples.
+
+---
+
+## Getting Started
+
+### Installation
+
+The easiest way is via the abc-cluster-cli, which automatically downloads the latest release:
+
+```bash
+# Install via CLI — automatically fetches latest release from GitHub
+abc compute probe <node-id>
+```
+
+Or download directly from [GitHub Releases](https://github.com/abc-cluster/abc-node-probe/releases):
+
+```bash
+# Get the v0.1.0 release for your platform
+wget https://github.com/abc-cluster/abc-node-probe/releases/download/v0.1.0/abc-node-probe-linux-amd64
+chmod +x abc-node-probe-linux-amd64
+./abc-node-probe-linux-amd64 --version
+```
+
+### First Run (2 minutes)
+
+```bash
+# Declare jurisdiction and run the probe
+./abc-node-probe --jurisdiction=ZA
+
+# Output shows a color-coded table plus JSON report
+# Look for: "NODE ELIGIBLE TO JOIN: YES" at the bottom
+```
+
 ---
 
 ## Check categories
@@ -50,6 +84,8 @@ This check is informational and does not prevent cluster membership, but provide
 
 ## Build
 
+### From source
+
 ```sh
 # Build for the host platform
 make build
@@ -67,6 +103,44 @@ make build-all
 ```
 
 The binary will appear as `./abc-node-probe` (host) or `dist/abc-node-probe-<os>-<arch>[.exe]` (cross-compiled).
+
+**Version Injection:** The Makefile automatically injects version from git tags:
+
+```bash
+# Building from a tagged commit
+git describe --tags
+# → v1.0.0
+
+make build
+# Produces: abc-node-probe v1.0.0
+
+# Without a tag, uses "dev" as version
+git checkout main && make build
+# Produces: abc-node-probe dev
+```
+
+### Release
+
+```sh
+# Build binaries for all platforms
+make build-all
+
+# Generate checksums
+cd dist && sha256sum abc-node-probe-* > sha256sums.txt
+
+# Push tag to GitHub (triggers CI release workflow)
+git tag -a v1.0.0 -m "Release abc-node-probe v1.0.0"
+git push origin v1.0.0
+```
+
+The GitHub Actions [build-release.yml](.github/workflows/build-release.yml) workflow automatically:
+1. Builds binaries for all platforms
+2. Generates checksums
+3. Creates a GitHub Release with artifacts
+
+The cli will automatically fetch and cache the latest release when running `abc compute probe`.
+
+### Verify static binary
 
 To confirm the Linux binary is fully static:
 
@@ -96,6 +170,10 @@ CGO_ENABLED=0 go test -tags integration ./...
 ---
 
 ## Run
+
+See [USAGE.md](USAGE.md) for detailed workflows, examples, and integration guides.
+
+### Quick reference
 
 ```sh
 # Basic run — stdout mode, no compliance check
@@ -128,6 +206,8 @@ CGO_ENABLED=0 go test -tags integration ./...
 # Print version
 ./abc-node-probe --version
 ```
+
+For more examples, including CI/CD integration, batch testing via Nomad, and API workflows, see **[USAGE.md](USAGE.md)**.
 
 ### Environment variables
 
@@ -176,7 +256,7 @@ Every run produces one `ProbeReport`:
   "node_hostname": "worker-01",
   "node_role": "compute",
   "jurisdiction": "ZA",
-  "timestamp": "2026-03-17T14:22:00Z",
+  "timestamp": "2026-04-14T14:22:00Z",
   "total_duration_ms": 4321,
   "summary": {
     "total_checks": 28,
@@ -245,10 +325,42 @@ In `--nomad-mode`:
 
 ## Release
 
-```sh
-make release
-# Produces dist/ with binaries for all platforms and a sha256sums.txt
-```
+### Publishing a new release
+
+1. **Tag the commit** with semantic versioning:
+   ```bash
+   git tag -a v1.1.0 -m "Release v1.1.0: Add new compliance checks"
+   git push origin v1.1.0
+   ```
+
+2. **GitHub Actions** automatically:
+   - Builds binaries for all platforms
+   - Generates SHA256 checksums
+   - Creates a GitHub Release with artifacts
+
+3. **The abc-cluster-cli** automatically:
+   - Detects the new release via GitHub API
+   - Downloads and caches binaries
+   - Updates `probe_version` in outputs
+
+### Release artifacts
+
+Each release includes:
+- `abc-node-probe-linux-amd64` — Linux x86_64
+- `abc-node-probe-linux-arm64` — Linux ARM64
+- `abc-node-probe-darwin-amd64` — macOS Intel
+- `abc-node-probe-darwin-arm64` — macOS Apple Silicon
+- `abc-node-probe-windows-amd64.exe` — Windows x86_64
+- `abc-node-probe-windows-arm64.exe` — Windows ARM64
+- `sha256sums.txt` — Checksums for verification
+
+### Versioning scheme
+
+Uses [Semantic Versioning](https://semver.org/):
+- `v0.1.0` — Initial release
+- `v0.2.0` — New features (backward compatible)
+- `v0.1.1` — Bug fixes (backward compatible)
+- `v1.0.0` — Stable release
 
 ---
 
@@ -257,3 +369,31 @@ make release
 ```sh
 make lint   # requires golangci-lint in PATH
 ```
+
+---
+
+## Documentation
+
+- **[USAGE.md](USAGE.md)** — Detailed usage guide with workflows and examples
+  - Installation from releases
+  - Common use cases (pre-flight checks, batch testing, CI/CD)
+  - Nomad integration
+  - API integration with control plane
+  - Troubleshooting
+
+- **[docs/](docs/)** — Architecture and design documents
+  - Check category details
+  - JSON schema reference
+  - Hardware compatibility notes
+
+---
+
+## Support
+
+Issues and feature requests: [GitHub Issues](https://github.com/abc-cluster/abc-node-probe/issues)
+
+When reporting issues, include:
+- Output of `./abc-node-probe --version`
+- Full JSON report: `./abc-node-probe --jurisdiction=ZA --json`
+- OS and kernel information: `uname -a`
+
