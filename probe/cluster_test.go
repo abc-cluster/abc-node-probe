@@ -51,8 +51,8 @@ func TestRunClusterSlurmQueueAndWorkload(t *testing.T) {
 	if report.ProbeScope != "cluster" {
 		t.Fatalf("ProbeScope = %q, want cluster", report.ProbeScope)
 	}
-	if len(report.Results) != 4 {
-		t.Fatalf("len(Results) = %d, want 4", len(report.Results))
+	if len(report.Results) != 5 {
+		t.Fatalf("len(Results) = %d, want 5", len(report.Results))
 	}
 	if report.Summary.WarnCount == 0 {
 		t.Fatal("expected a WARN due to pending queue jobs")

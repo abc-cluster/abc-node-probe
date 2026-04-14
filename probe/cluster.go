@@ -10,6 +10,7 @@ import (
 )
 
 var clusterCategoryOrder = []string{
+	"characteristics",
 	"cluster",
 	"queue",
 	"workload",
@@ -71,6 +72,8 @@ func detectHPCScheduler(requested string) string {
 
 func checksForClusterCategory(cat, scheduler string) []CheckResult {
 	switch cat {
+	case "characteristics":
+		return []CheckResult{clusterCharacteristicsCheck(scheduler)}
 	case "cluster":
 		return []CheckResult{clusterSchedulerCheck(scheduler), clusterNodeSummaryCheck(scheduler)}
 	case "queue":
@@ -79,6 +82,40 @@ func checksForClusterCategory(cat, scheduler string) []CheckResult {
 		return []CheckResult{clusterWorkloadCheck(scheduler)}
 	default:
 		return nil
+	}
+}
+
+func clusterCharacteristicsCheck(scheduler string) CheckResult {
+	start := time.Now()
+	tools := []string{}
+	if commandExists("sinfo") || commandExists("squeue") {
+		tools = append(tools, "slurm-cli")
+	}
+	if commandExists("qstat") {
+		tools = append(tools, "pbs-cli")
+	}
+
+	if len(tools) == 0 {
+		return CheckResult{
+			ID:         "characteristics.cluster.tooling.summary",
+			Category:   "characteristics",
+			Name:       "Cluster Tooling Characteristics",
+			Severity:   SeveritySkip,
+			Message:    "no scheduler CLI tools detected on this host",
+			Value:      "none",
+			DurationMs: time.Since(start).Milliseconds(),
+		}
+	}
+
+	msg := fmt.Sprintf("scheduler=%s; tooling=%s", scheduler, strings.Join(tools, ","))
+	return CheckResult{
+		ID:         "characteristics.cluster.tooling.summary",
+		Category:   "characteristics",
+		Name:       "Cluster Tooling Characteristics",
+		Severity:   SeverityInfo,
+		Message:    msg,
+		Value:      msg,
+		DurationMs: time.Since(start).Milliseconds(),
 	}
 }
 
