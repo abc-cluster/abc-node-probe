@@ -70,7 +70,7 @@ It never modifies system state.`,
 	cmd.Flags().StringVar(&f.apiToken, "api-token", "", "Bearer token for API auth (or set ABC_PROBE_TOKEN env var)")
 	cmd.Flags().StringVar(&f.mode, "mode", "stdout", "Output mode: stdout | file | send")
 	cmd.Flags().StringVar(&f.outputFile, "output-file", "", "Path to write JSON report (required for --mode=file)")
-	cmd.Flags().StringVar(&f.skipCategories, "skip-categories", "", "Comma-separated check categories to skip. Node scope: hardware,storage,smart,network,os,compliance,security. Cluster scope: characteristics,cluster,queue,workload")
+	cmd.Flags().StringVar(&f.skipCategories, "skip-categories", "", "Comma-separated check categories to skip. Node scope: hardware,storage,smart,network,os,compliance,security. Cluster scope: characteristics,controller_health,cluster,partitions,capacity,queue,pending_reasons,workload,workload_detail,policy")
 	cmd.Flags().BoolVar(&f.failFast, "fail-fast", false, "Stop after first FAIL result")
 	cmd.Flags().BoolVar(&f.jsonOnly, "json", false, "Print raw JSON to stdout (suppresses coloured output)")
 	cmd.Flags().BoolVar(&f.nomadMode, "nomad-mode", false, "Nomad-compatible mode: always exit 0 (success) since probe task completed; use JSON output to check node readiness")
