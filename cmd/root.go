@@ -22,6 +22,8 @@ var (
 type flags struct {
 	jurisdiction   string
 	nodeRole       string
+	probeScope     string
+	hpcScheduler   string
 	apiEndpoint    string
 	apiToken       string
 	mode           string
@@ -49,7 +51,7 @@ func newRootCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "abc-node-probe",
-		Short: "Assess a Linux node's readiness to join the ABC-cluster Nomad/Tailscale network",
+		Short: "Assess node or cluster readiness in the ABC-cluster Nomad/Tailscale network",
 		Long: `abc-node-probe is a read-only assessment instrument that checks whether a Linux
 node meets the requirements to join the ABC-cluster Nomad/Tailscale hybrid compute network.
 
@@ -62,11 +64,13 @@ It never modifies system state.`,
 
 	cmd.Flags().StringVar(&f.jurisdiction, "jurisdiction", "", "ISO 3166-1 alpha-2 country code (REQUIRED for compliance checks). Example: --jurisdiction=ZA")
 	cmd.Flags().StringVar(&f.nodeRole, "node-role", "compute", "One of: compute, storage, scheduler, gateway")
+	cmd.Flags().StringVar(&f.probeScope, "probe-scope", "node", "Probe scope: node | cluster")
+	cmd.Flags().StringVar(&f.hpcScheduler, "hpc-scheduler", "auto", "HPC scheduler for cluster scope: auto | slurm | pbs")
 	cmd.Flags().StringVar(&f.apiEndpoint, "api-endpoint", "", "ABC-cluster control plane API base URL (required for --mode=send)")
 	cmd.Flags().StringVar(&f.apiToken, "api-token", "", "Bearer token for API auth (or set ABC_PROBE_TOKEN env var)")
 	cmd.Flags().StringVar(&f.mode, "mode", "stdout", "Output mode: stdout | file | send")
 	cmd.Flags().StringVar(&f.outputFile, "output-file", "", "Path to write JSON report (required for --mode=file)")
-	cmd.Flags().StringVar(&f.skipCategories, "skip-categories", "", "Comma-separated check categories to skip: hardware,storage,smart,network,os,compliance,security")
+	cmd.Flags().StringVar(&f.skipCategories, "skip-categories", "", "Comma-separated check categories to skip. Node scope: hardware,storage,smart,network,os,compliance,security. Cluster scope: cluster,queue,workload")
 	cmd.Flags().BoolVar(&f.failFast, "fail-fast", false, "Stop after first FAIL result")
 	cmd.Flags().BoolVar(&f.jsonOnly, "json", false, "Print raw JSON to stdout (suppresses coloured output)")
 	cmd.Flags().BoolVar(&f.nomadMode, "nomad-mode", false, "Nomad-compatible mode: always exit 0 (success) since probe task completed; use JSON output to check node readiness")
@@ -92,6 +96,11 @@ func run(f *flags) error {
 	if f.jurisdiction == "" {
 		f.jurisdiction = os.Getenv("ABC_PROBE_JURISDICTION")
 	}
+	if f.hpcScheduler == "auto" {
+		if envScheduler := os.Getenv("ABC_PROBE_HPC_SCHEDULER"); envScheduler != "" {
+			f.hpcScheduler = envScheduler
+		}
+	}
 
 	// Validate mode
 	switch f.mode {
@@ -107,11 +116,24 @@ func run(f *flags) error {
 		return fmt.Errorf("--api-endpoint is required when --mode=send")
 	}
 
-	// Validate node role
-	switch f.nodeRole {
-	case "compute", "storage", "scheduler", "gateway":
+	switch f.probeScope {
+	case "node", "cluster":
 	default:
-		return fmt.Errorf("invalid --node-role %q: must be compute, storage, scheduler, or gateway", f.nodeRole)
+		return fmt.Errorf("invalid --probe-scope %q: must be node or cluster", f.probeScope)
+	}
+	switch f.hpcScheduler {
+	case "auto", "slurm", "pbs":
+	default:
+		return fmt.Errorf("invalid --hpc-scheduler %q: must be auto, slurm, or pbs", f.hpcScheduler)
+	}
+
+	// Validate node role
+	if f.probeScope == "node" {
+		switch f.nodeRole {
+		case "compute", "storage", "scheduler", "gateway":
+		default:
+			return fmt.Errorf("invalid --node-role %q: must be compute, storage, scheduler, or gateway", f.nodeRole)
+		}
 	}
 
 	// Parse skip categories
@@ -126,6 +148,8 @@ func run(f *flags) error {
 	cfg := probe.Config{
 		Jurisdiction:   f.jurisdiction,
 		NodeRole:       f.nodeRole,
+		ProbeScope:     f.probeScope,
+		HPCScheduler:   f.hpcScheduler,
 		SkipCategories: skipCats,
 		FailFast:       f.failFast,
 		ProbeVersion:   version,

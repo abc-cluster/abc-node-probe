@@ -185,6 +185,9 @@ See [USAGE.md](USAGE.md) for detailed workflows, examples, and integration guide
 # Nomad-compatible mode (always exits 0, check JSON for readiness)
 ./abc-node-probe --nomad-mode --jurisdiction=ZA --json
 
+# Cluster scope (optional): inspect integrated HPC scheduler, queue, and workload
+./abc-node-probe --probe-scope=cluster --hpc-scheduler=auto --json
+
 # Write JSON report to file
 ./abc-node-probe --jurisdiction=ZA --mode=file --output-file=/tmp/report.json
 
@@ -216,6 +219,7 @@ For more examples, including CI/CD integration, batch testing via Nomad, and API
 | `ABC_PROBE_TOKEN` | `--api-token` | Bearer token for control plane API |
 | `ABC_PROBE_API` | `--api-endpoint` | Control plane API base URL |
 | `ABC_PROBE_JURISDICTION` | `--jurisdiction` | ISO 3166-1 alpha-2 country code |
+| `ABC_PROBE_HPC_SCHEDULER` | `--hpc-scheduler` | Scheduler override for cluster scope (`auto`, `slurm`, `pbs`) |
 | `ABC_MINIO_ENDPOINT` | — | `host:port` of MinIO endpoint to test; storage check is skipped if unset |
 
 ---
@@ -225,7 +229,7 @@ For more examples, including CI/CD integration, batch testing via Nomad, and API
 ### Stdout (default)
 
 ```
-abc-node-probe v0.1.0 — node: worker-01 — role: compute — jurisdiction: ZA
+abc-node-probe v0.1.0 — scope: node — node: worker-01 — role: compute — jurisdiction: ZA
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 CATEGORY       CHECK                          SEVERITY   VALUE          MESSAGE
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

@@ -12,6 +12,8 @@ import (
 type Config struct {
 	Jurisdiction   string
 	NodeRole       string
+	ProbeScope     string
+	HPCScheduler   string
 	SkipCategories []string
 	FailFast       bool
 	ProbeVersion   string
@@ -31,6 +33,10 @@ var categoryOrder = []string{
 
 // Run orchestrates all check categories and returns a ProbeReport.
 func Run(cfg Config) (*ProbeReport, error) {
+	if cfg.ProbeScope == "cluster" {
+		return runCluster(cfg)
+	}
+
 	start := time.Now()
 
 	hostname, err := os.Hostname()
@@ -70,6 +76,7 @@ func Run(cfg Config) (*ProbeReport, error) {
 	report := &ProbeReport{
 		SchemaVersion: "1.0",
 		ProbeVersion:  cfg.ProbeVersion,
+		ProbeScope:    "node",
 		NodeHostname:  hostname,
 		NodeRole:      cfg.NodeRole,
 		Jurisdiction:  cfg.Jurisdiction,

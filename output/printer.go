@@ -23,8 +23,12 @@ const separator = "━━━━━━━━━━━━━━━━━━━━�
 
 // PrintReport writes a coloured human-readable table for the given report.
 func PrintReport(w io.Writer, r *probe.ProbeReport) {
-	fmt.Fprintf(w, "abc-node-probe %s — node: %s — role: %s — jurisdiction: %s\n",
-		r.ProbeVersion, r.NodeHostname, r.NodeRole, r.Jurisdiction)
+	scope := r.ProbeScope
+	if scope == "" {
+		scope = "node"
+	}
+	fmt.Fprintf(w, "abc-node-probe %s — scope: %s — node: %s — role: %s — jurisdiction: %s\n",
+		r.ProbeVersion, scope, r.NodeHostname, r.NodeRole, r.Jurisdiction)
 	fmt.Fprintln(w, separator)
 	fmt.Fprintf(w, "%-14s %-30s %-10s %-14s %s\n", "CATEGORY", "CHECK", "SEVERITY", "VALUE", "MESSAGE")
 	fmt.Fprintln(w, separator)

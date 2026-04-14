@@ -33,6 +33,7 @@ type CheckResult struct {
 type ProbeReport struct {
 	SchemaVersion string        `json:"schema_version"`
 	ProbeVersion  string        `json:"probe_version"`
+	ProbeScope    string        `json:"probe_scope,omitempty"`
 	NodeHostname  string        `json:"node_hostname"`
 	NodeRole      string        `json:"node_role"`
 	Jurisdiction  string        `json:"jurisdiction"`
