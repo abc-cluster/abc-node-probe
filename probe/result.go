@@ -21,7 +21,7 @@ type CheckResult struct {
 	ID         string            `json:"id"`
 	Category   string            `json:"category"`
 	Name       string            `json:"name"`
-	Severity   Severity          `json:"severity"`
+	Severity   Severity          `json:"severity,omitempty"`
 	Message    string            `json:"message"`
 	Value      interface{}       `json:"value,omitempty"`
 	Unit       string            `json:"unit,omitempty"`
@@ -33,6 +33,7 @@ type CheckResult struct {
 type ProbeReport struct {
 	SchemaVersion string        `json:"schema_version"`
 	ProbeVersion  string        `json:"probe_version"`
+	Evaluated     bool          `json:"evaluated"`
 	ProbeScope    string        `json:"probe_scope,omitempty"`
 	NodeHostname  string        `json:"node_hostname"`
 	NodeRole      string        `json:"node_role"`

@@ -27,6 +27,7 @@ func makeTestReport(failCount, warnCount int) *probe.ProbeReport {
 	r := &probe.ProbeReport{
 		SchemaVersion: "1.0",
 		ProbeVersion:  "test",
+		Evaluated:     true,
 		NodeHostname:  "testhost",
 		NodeRole:      "compute",
 		Jurisdiction:  "ZA",
@@ -74,5 +75,23 @@ func TestPrintReport_SummaryCountsPresent(t *testing.T) {
 	out := buf.String()
 	if !strings.Contains(out, "SUMMARY:") {
 		t.Error("expected SUMMARY line in output")
+	}
+}
+
+func TestPrintReport_NotEvaluatedSkipsEligibility(t *testing.T) {
+	var buf bytes.Buffer
+	r := makeTestReport(1, 0)
+	r.Evaluated = false
+	PrintReport(&buf, r)
+
+	out := buf.String()
+	if !strings.Contains(out, "severity scoring off") {
+		t.Errorf("expected observations-only summary, got:\n%s", out)
+	}
+	if strings.Contains(out, "NODE ELIGIBLE TO JOIN: NO") {
+		t.Error("did not expect eligibility verdict when not evaluated")
+	}
+	if !strings.Contains(out, "n/a (not evaluated)") {
+		t.Errorf("expected n/a eligibility line, got:\n%s", out)
 	}
 }

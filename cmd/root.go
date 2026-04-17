@@ -30,6 +30,7 @@ type flags struct {
 	outputFile     string
 	skipCategories string
 	failFast       bool
+	evaluate       bool
 	jsonOnly       bool
 	nomadMode      bool
 	timeout        time.Duration
@@ -71,7 +72,8 @@ It never modifies system state.`,
 	cmd.Flags().StringVar(&f.mode, "mode", "stdout", "Output mode: stdout | file | send")
 	cmd.Flags().StringVar(&f.outputFile, "output-file", "", "Path to write JSON report (required for --mode=file)")
 	cmd.Flags().StringVar(&f.skipCategories, "skip-categories", "", "Comma-separated check categories to skip. Node scope: hardware,storage,smart,network,os,compliance,security. Cluster scope: characteristics,controller_health,cluster,partitions,capacity,queue,pending_reasons,workload,workload_detail,policy")
-	cmd.Flags().BoolVar(&f.failFast, "fail-fast", false, "Stop after first FAIL result")
+	cmd.Flags().BoolVar(&f.failFast, "fail-fast", false, "Stop after first FAIL result (only with --evaluate)")
+	cmd.Flags().BoolVar(&f.evaluate, "evaluate", false, "Compute PASS/WARN/FAIL/INFO severities, summary, and exit codes for admission-style reporting; without it, checks still run but only observations (values/messages) are returned")
 	cmd.Flags().BoolVar(&f.jsonOnly, "json", false, "Print raw JSON to stdout (suppresses coloured output)")
 	cmd.Flags().BoolVar(&f.nomadMode, "nomad-mode", false, "Nomad-compatible mode: always exit 0 (success) since probe task completed; use JSON output to check node readiness")
 	cmd.Flags().DurationVar(&f.timeout, "timeout", 120*time.Second, "Overall probe timeout")
@@ -152,6 +154,7 @@ func run(f *flags) error {
 		HPCScheduler:   f.hpcScheduler,
 		SkipCategories: skipCats,
 		FailFast:       f.failFast,
+		Evaluate:       f.evaluate,
 		ProbeVersion:   version,
 		Timeout:        f.timeout,
 	}
@@ -190,13 +193,18 @@ func run(f *flags) error {
 		}
 		hostname := report.NodeHostname
 		s := report.Summary
-		eligible := "ELIGIBLE"
-		if !s.Eligible {
-			eligible = "NOT ELIGIBLE"
-		}
 		fmt.Printf("Report written to %s\n", f.outputFile)
-		fmt.Printf("Summary (%s): %d checks — %d PASS, %d WARN, %d FAIL — %s\n",
-			hostname, s.TotalChecks, s.PassCount, s.WarnCount, s.FailCount, eligible)
+		if report.Evaluated {
+			eligible := "ELIGIBLE"
+			if !s.Eligible {
+				eligible = "NOT ELIGIBLE"
+			}
+			fmt.Printf("Summary (%s): %d checks — %d PASS, %d WARN, %d FAIL — %s\n",
+				hostname, s.TotalChecks, s.PassCount, s.WarnCount, s.FailCount, eligible)
+		} else {
+			fmt.Printf("Summary (%s): %d checks — observations only (no severity scoring; re-run with --evaluate for admission summary)\n",
+				hostname, s.TotalChecks)
+		}
 
 	case "send":
 		output.PrintReport(os.Stdout, report)
@@ -214,6 +222,9 @@ func run(f *flags) error {
 }
 
 func exitCodeForReport(r *probe.ProbeReport) int {
+	if !r.Evaluated {
+		return 0
+	}
 	if r.Summary.FailCount > 0 {
 		return 2
 	}

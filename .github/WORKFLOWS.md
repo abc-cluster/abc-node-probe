@@ -27,8 +27,8 @@ The abc-node-probe project includes three main workflows:
 - **Steps:**
   - Checkout code
   - Setup Go with version from go.mod
-  - Run unit tests (`make test-unit`)
-  - Run all tests (`make test`)
+  - Run unit tests (`just test-unit`)
+  - Run all tests (`just test`)
 
 #### Lint
 - **Runs on:** Ubuntu Latest
@@ -36,7 +36,7 @@ The abc-node-probe project includes three main workflows:
 - **Steps:**
   - Checkout code
   - Setup Go with version from go.mod
-  - Install and run golangci-lint (`make lint`)
+  - Install and run golangci-lint (not currently wired in `ci.yml`; use locally if configured)
 
 #### Build
 - **Runs on:** Ubuntu Latest

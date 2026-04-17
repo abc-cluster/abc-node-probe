@@ -76,6 +76,7 @@ This check is informational and does not prevent cluster membership, but provide
 ## Requirements
 
 - Go 1.22 or newer
+- [just](https://github.com/casey/just) — optional; used for build/test recipes (`just --list`)
 - `CGO_ENABLED=0` — the build is always static; CGO is never used
 - Target OS: Linux, macOS, or Windows
 - For S.M.A.R.T. checks (Linux only): run as root, or be a member of the `disk` group
@@ -88,45 +89,42 @@ This check is informational and does not prevent cluster membership, but provide
 
 ```sh
 # Build for the host platform
-make build
+just build
 
 # Cross-compile for a specific platform
-make build-linux-amd64
-make build-linux-arm64
-make build-darwin-amd64
-make build-darwin-arm64
-make build-windows-amd64
-make build-windows-arm64
+just build-linux-amd64
+just build-linux-arm64
+just build-darwin-amd64
+just build-darwin-arm64
+just build-windows-amd64
+just build-windows-arm64
 
 # Build all platforms at once
-make build-all
+just build-all
 ```
 
 The binary will appear as `./abc-node-probe` (host) or `dist/abc-node-probe-<os>-<arch>[.exe]` (cross-compiled).
 
-**Version Injection:** The Makefile automatically injects version from git tags:
+**Version Injection:** `just build-release` (and cross-compile recipes) inject version from git tags:
 
 ```bash
 # Building from a tagged commit
 git describe --tags
 # → v1.0.0
 
-make build
+just build-release
 # Produces: abc-node-probe v1.0.0
 
 # Without a tag, uses "dev" as version
-git checkout main && make build
+git checkout main && just build-release
 # Produces: abc-node-probe dev
 ```
 
 ### Release
 
 ```sh
-# Build binaries for all platforms
-make build-all
-
-# Generate checksums
-cd dist && sha256sum abc-node-probe-* > sha256sums.txt
+# Build binaries for all platforms and write dist/sha256sums.txt
+just release
 
 # Push tag to GitHub (triggers CI release workflow)
 git tag -a v1.0.0 -m "Release abc-node-probe v1.0.0"
@@ -158,13 +156,13 @@ ldd dist/abc-node-probe-linux-amd64
 
 ```sh
 # Unit tests only — no network, no /proc required, works on any OS
-make test-unit
+just test-unit
 
 # All tests (includes tests that read local system state)
-make test
+just test
 
 # Integration tests (Linux only, tagged //go:build integration)
-CGO_ENABLED=0 go test -tags integration ./...
+just test-integration
 ```
 
 ---

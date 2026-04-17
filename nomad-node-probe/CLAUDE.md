@@ -47,19 +47,20 @@ nomad-node-probe/
 - Go 1.22 or newer
 - `CGO_ENABLED=0` — mandatory for static binary; all builds must use this flag
 - Target: `GOOS=linux`, primary architectures `GOARCH=amd64` and `GOARCH=arm64`
-- The Makefile `build` target must set `CGO_ENABLED=0` and pass `-ldflags="-s -w"` to strip debug symbols
+- The `justfile` `build` recipe must set `CGO_ENABLED=0` and release builds pass `-ldflags="-s -w"` to strip debug symbols
 - Binary must run on Linux kernel 3.x or newer, Ubuntu 14.04 LTS and later
 
-### Makefile Targets (implement these)
+### justfile targets (see repo root `justfile`)
 
-```makefile
-build          # CGO_ENABLED=0 go build for host arch
-build-amd64    # cross-compile linux/amd64
-build-arm64    # cross-compile linux/arm64
-test           # go test ./...
-test-unit      # go test ./... -short (no network, no /proc required)
-lint           # golangci-lint run
-release        # build both arches, sha256sum, produce dist/
+```text
+build              # CGO_ENABLED=0 go build for host arch (no injected version)
+build-release      # same with -X main.Version/BuildTime/GitCommit
+build-linux-amd64  # cross-compile linux/amd64 → dist/ (alias: build-amd64)
+build-linux-arm64  # cross-compile linux/arm64 → dist/ (alias: build-arm64)
+test               # go test ./...
+test-unit          # go test ./... -short (no network, no /proc required)
+install-local      # release-style build → ~/bin/abc-node-probe
+release            # build all platform/arch combinations, sha256sum → dist/
 ```
 
 ---
@@ -483,7 +484,7 @@ var (
 )
 ```
 
-Makefile release target must pass:
+`just release` / `just build-release` must pass:
 ```
 -ldflags="-s -w -X main.Version=$(VERSION) -X main.BuildTime=$(BUILD_TIME) -X main.GitCommit=$(GIT_COMMIT)"
 ```
@@ -512,7 +513,7 @@ Tag with `//go:build integration` and skip in `test-unit` target.
 
 ### Done When
 
-- [ ] `make build` produces a statically linked binary: `file nomad-node-probe` reports `statically linked`
+- [ ] `just build-release` produces a statically linked binary: `file abc-node-probe` reports `statically linked`
 - [ ] `ldd nomad-node-probe` reports `not a dynamic executable`
 - [ ] `./nomad-node-probe --jurisdiction=ZA --mode=stdout` exits without panic on Ubuntu 20.04 and 22.04
 - [ ] `./nomad-node-probe --jurisdiction=ZA --mode=file --output-file=/tmp/report.json` produces valid JSON parseable by `jq`
@@ -520,8 +521,8 @@ Tag with `//go:build integration` and skip in `test-unit` target.
 - [ ] `--mode=send` POSTs correct JSON with Authorization header (verified by httptest mock)
 - [ ] Exit code is `2` when any FAIL check is present
 - [ ] Exit code is `1` when only WARN checks are present
-- [ ] `make test-unit` passes with `CGO_ENABLED=0`
-- [ ] `make build-arm64` produces a valid arm64 ELF binary
+- [ ] `just test-unit` passes with `CGO_ENABLED=0`
+- [ ] `just build-linux-arm64` produces a valid arm64 ELF binary
 
 ---
 

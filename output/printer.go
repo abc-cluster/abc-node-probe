@@ -66,13 +66,19 @@ func PrintReport(w io.Writer, r *probe.ProbeReport) {
 
 	fmt.Fprintln(w, separator)
 	s := r.Summary
-	fmt.Fprintf(w, "SUMMARY: %d checks — %d PASS, %d WARN, %d FAIL, %d SKIP\n",
-		s.TotalChecks, s.PassCount, s.WarnCount, s.FailCount, s.SkipCount)
+	if r.Evaluated {
+		fmt.Fprintf(w, "SUMMARY: %d checks — %d PASS, %d WARN, %d FAIL, %d SKIP, %d INFO\n",
+			s.TotalChecks, s.PassCount, s.WarnCount, s.FailCount, s.SkipCount, s.InfoCount)
 
-	if s.Eligible {
-		passColor.Fprintf(w, "NODE ELIGIBLE TO JOIN: YES\n")
+		if s.Eligible {
+			passColor.Fprintf(w, "NODE ELIGIBLE TO JOIN: YES\n")
+		} else {
+			failColor.Fprintf(w, "NODE ELIGIBLE TO JOIN: NO (resolve FAIL checks first)\n")
+		}
 	} else {
-		failColor.Fprintf(w, "NODE ELIGIBLE TO JOIN: NO (resolve FAIL checks first)\n")
+		fmt.Fprintf(w, "SUMMARY: %d checks — severity scoring off (pass --evaluate for PASS/WARN/FAIL and eligibility); %d SKIP\n",
+			s.TotalChecks, s.SkipCount)
+		skipColor.Fprintln(w, "NODE ELIGIBLE TO JOIN: n/a (not evaluated)")
 	}
 	fmt.Fprintln(w, separator)
 }
@@ -89,6 +95,8 @@ func colorSeverity(sev probe.Severity) string {
 		return skipColor.Sprint(string(sev))
 	case probe.SeverityInfo:
 		return infoColor.Sprint(string(sev))
+	case "":
+		return skipColor.Sprint("—")
 	}
 	return string(sev)
 }

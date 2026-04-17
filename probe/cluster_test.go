@@ -56,6 +56,7 @@ func TestRunClusterSlurmQueueAndWorkload(t *testing.T) {
 		ProbeScope:   "cluster",
 		HPCScheduler: "auto",
 		ProbeVersion: "test",
+		Evaluate:     true,
 	})
 	if err != nil {
 		t.Fatalf("Run returned error: %v", err)

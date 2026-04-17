@@ -16,8 +16,11 @@ type Config struct {
 	HPCScheduler   string
 	SkipCategories []string
 	FailFast       bool
-	ProbeVersion   string
-	Timeout        time.Duration
+	// Evaluate enables PASS/WARN/FAIL/INFO scoring. When false, checks still run
+	// and return values and messages, but severities other than SKIP are cleared.
+	Evaluate     bool
+	ProbeVersion string
+	Timeout      time.Duration
 }
 
 // categoryOrder defines the deterministic execution order of check categories.
@@ -31,10 +34,32 @@ var categoryOrder = []string{
 	"security",
 }
 
+// observationsOnlyResults strips severity for checks that produced a scored outcome,
+// preserving SKIP so callers can still see checks that did not run.
+func observationsOnlyResults(results []CheckResult) []CheckResult {
+	out := make([]CheckResult, len(results))
+	for i, r := range results {
+		if r.Severity != SeveritySkip {
+			r.Severity = ""
+		}
+		out[i] = r
+	}
+	return out
+}
+
 // Run orchestrates all check categories and returns a ProbeReport.
 func Run(cfg Config) (*ProbeReport, error) {
 	if cfg.ProbeScope == "cluster" {
-		return runCluster(cfg)
+		report, err := runCluster(cfg)
+		if err != nil {
+			return nil, err
+		}
+		if !cfg.Evaluate {
+			report.Results = observationsOnlyResults(report.Results)
+			report.Summary = computeSummary(report.Results)
+		}
+		report.Evaluated = cfg.Evaluate
+		return report, nil
 	}
 
 	start := time.Now()
@@ -66,24 +91,30 @@ func Run(cfg Config) (*ProbeReport, error) {
 			continue
 		}
 
-		results := runCategoryParallel(checks, &failFast, cfg.FailFast)
+		results := runCategoryParallel(checks, &failFast, cfg.FailFast && cfg.Evaluate)
 		sort.Slice(results, func(i, j int) bool {
 			return results[i].ID < results[j].ID
 		})
 		allResults = append(allResults, results...)
 	}
 
+	results := allResults
+	if !cfg.Evaluate {
+		results = observationsOnlyResults(results)
+	}
+
 	report := &ProbeReport{
 		SchemaVersion: "1.0",
 		ProbeVersion:  cfg.ProbeVersion,
+		Evaluated:     cfg.Evaluate,
 		ProbeScope:    "node",
 		NodeHostname:  hostname,
 		NodeRole:      cfg.NodeRole,
 		Jurisdiction:  cfg.Jurisdiction,
 		Timestamp:     time.Now().UTC(),
 		DurationMs:    time.Since(start).Milliseconds(),
-		Results:       allResults,
-		Summary:       computeSummary(allResults),
+		Results:       results,
+		Summary:       computeSummary(results),
 	}
 
 	return report, nil

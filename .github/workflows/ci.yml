@@ -38,12 +38,15 @@ jobs:
           go-version: ${{ matrix.go-version }}
           cache: true
 
+      - name: Setup just
+        uses: extractions/setup-just@v3
+
       - name: Run unit tests
-        run: make test-unit
+        run: just test-unit
 
       - name: Run all tests (excluding integration)
         if: always()
-        run: make test
+        run: just test
 
   build:
     name: Build (${{ matrix.goos }}/${{ matrix.goarch }})

@@ -10,6 +10,7 @@ func TestProbeReportJSONRoundTrip(t *testing.T) {
 	report := &ProbeReport{
 		SchemaVersion: "1.0",
 		ProbeVersion:  "0.1.0",
+		Evaluated:     true,
 		NodeHostname:  "test-node",
 		NodeRole:      "compute",
 		Jurisdiction:  "ZA",
